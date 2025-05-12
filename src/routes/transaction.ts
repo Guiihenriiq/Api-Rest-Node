@@ -2,18 +2,18 @@ import { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { knex } from "../database";
-import { Tables } from "knex/types/tables";
 
 
-export function transactionsRoutes(app:FastifyInstance){
-    app.get('/', async() => {
+
+export function transactionsRoutes(app: FastifyInstance) {
+    app.get('/', async () => {
         const transactions = await knex('transactions')
-        .select()
+            .select()
 
-        return {transactions}
+        return { transactions }
     })
 
-    app.get('/:id', async(request) => {
+    app.get('/:id', async (request) => {
         const getTransactionsParamsSchema = z.object({
             id: z.string().uuid(),
         })
@@ -21,36 +21,48 @@ export function transactionsRoutes(app:FastifyInstance){
         const { id } = getTransactionsParamsSchema.parse(request.params)
 
         const transaction = await knex('transactions')
-        .where('id',id).first()
+            .where('id', id).first()
 
-        return {transaction}
+        return { transaction }
     })
 
-    app.get('/summary', async()=> {
+    app.get('/summary', async () => {
         const summary = await knex('transactions')
-        .sum('amount', {as: 'amount'})
-        .first()
+            .sum('amount', { as: 'amount' })
+            .first()
 
-        return {summary}
+        return { summary }
     })
 
-    app.post('/', async (request,reply) => {
+    app.post('/', async (request, reply) => {
         const createTransectionBodySchema = z.object({
             title: z.string(),
             amount: z.number(),
             type: z.enum(['credit', 'debit']),
-        }) 
+        })
 
-        const {title,amount,type} = createTransectionBodySchema.parse(
+        const { title, amount, type } = createTransectionBodySchema.parse(
             request.body)
 
-            await knex('transactions')
-            .insert({
-                id: randomUUID(),
-                title,
-                amount: type === 'credit' ? amount : amount *-1,
-            })
+        let sessionId = request.cookies.sessionId
 
-        return reply.status(201).send("Transaction Vary GoodS")
+        if (!sessionId) {
+            sessionId = randomUUID()
+
+            reply.cookie('session_id', sessionId, {
+                path: '/',
+                maxAge: 60 * 60 * 24 * 7, //7 days from expires
+            })
+        }
+
+        await knex('transactions').insert({
+            id: randomUUID(),
+            title,
+            amount: type === 'credit' ? amount : amount * -1,
+            session_id: sessionId,
+        });
+        console.log(knex)
+
+        return reply.status(201).send("Transaction created successfully");
     });
 }
